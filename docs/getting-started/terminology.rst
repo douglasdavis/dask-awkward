@@ -1,6 +1,9 @@
 Terminology
 -----------
 
+High level Array: ak versus dak
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 The most common class in both dask-awkward and awkward-array is the
 ``Array`` class. In dask-awkward the ``Array`` class provides a Dask
 collection representing a partitioned and lazily computed version of
@@ -42,6 +45,27 @@ Finally, the result of calling the ``compute()`` method on a
 ``dak.Array`` object will almost always result in an ``ak.Array``
 object.
 
+Glossary
+^^^^^^^^
+
+.. glossary::
+
+   Awkward Array
+       The array object provided by the ``awkward`` library. The
+       :py:obj:`ak.Array` class; an array that exists in memory.
+
+   Awkward function
+       Functions provided by the ``awkward`` library; thing such as
+       :py:func:`ak.min`, :func:`ak.max`, :func:`ak.flatten`, etc.
+
+   Collection
+       ...
+
+   Dask Awkward Array
+       ...
+
+   Column Optimization
+       ...
 
 .. raw:: html
 
