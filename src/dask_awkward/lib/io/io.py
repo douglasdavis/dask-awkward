@@ -10,6 +10,7 @@ from awkward.types.numpytype import primitive_to_dtype
 from dask.base import flatten, tokenize
 from dask.highlevelgraph import HighLevelGraph
 from dask.utils import funcname, is_integer, parse_bytes
+from fsspec.utils import read_block
 
 from dask_awkward.layers import AwkwardBlockwiseLayer, AwkwardInputLayer
 from dask_awkward.layers.layers import AwkwardMaterializedLayer
@@ -674,3 +675,49 @@ def bytes_reading_ingredients(
         sample_bytes = sample_bytes[:rfind]
 
     return out, sample_bytes
+
+
+class FromTextFn:
+    def __init__(self):
+        pass
+
+    def __call__(self, ingredients: tuple) -> ak.Array:
+        (fs, path, compression, offsets, length, delimiter) = ingredients
+
+        with fs.open(path, compression=compression) as f:
+            if offsets == 0 and length is None:
+                bytestring = f.read()
+            else:
+                bytestring = read_block(f, offsets, length, delimiter)
+
+            buffer = np.frombuffer(bytestring, dtype=np.uint8)
+            array = ak.from_numpy(buffer)
+            array = ak.unflatten(array, len(array))
+            array = ak.enforce_type(array, "string")
+            array_split = ak.str.split_pattern(array, "\n")
+            lines = array_split[0]
+            return lines
+
+
+def from_text(source, blocksize, delimiter, storage_options: dict | None = None):
+    from fsspec.core import get_fs_token_paths
+
+    fs, token, paths = get_fs_token_paths(source, storage_options=storage_options or {})
+
+    bytes_ingredients, sample_bytes = bytes_reading_ingredients(
+        fs,
+        paths,
+        None,
+        delimiter,
+        False,
+        blocksize,
+        "128 KiB",
+    )
+
+    return from_map(
+        FromTextFn(),
+        list(flatten(bytes_ingredients)),
+        label="from-text",
+        token=token,
+        meta=None,
+    )
