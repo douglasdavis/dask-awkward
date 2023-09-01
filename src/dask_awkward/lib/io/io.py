@@ -10,7 +10,8 @@ from awkward.types.numpytype import primitive_to_dtype
 from dask.base import flatten, tokenize
 from dask.highlevelgraph import HighLevelGraph
 from dask.utils import funcname, is_integer, parse_bytes
-from fsspec.utils import read_block
+from fsspec.core import get_fs_token_paths
+from fsspec.utils import infer_compression, read_block
 
 from dask_awkward.layers import AwkwardBlockwiseLayer, AwkwardInputLayer
 from dask_awkward.layers.layers import AwkwardMaterializedLayer
@@ -682,10 +683,12 @@ def _string_array_from_bytestring(bytestring, delimiter):
     array = ak.from_numpy(buffer)
     array = ak.unflatten(array, len(array))
     array = ak.enforce_type(array, "string")
-    if isinstance(delimiter, bytes):
-        delimiter = delimiter.decode()
     array_split = ak.str.split_pattern(array, delimiter)
     lines = array_split[0]
+    if len(lines) == 0:
+        return lines
+    if lines[-1] == "":
+        lines = lines[:-1]
     return lines
 
 
@@ -710,18 +713,20 @@ def from_text(
     blocksize: str | int = "128 MiB",
     delimiter: bytes = b"\n",
     sample_size: str | int = "128 KiB",
+    compression: str | None = "infer",
     storage_options: dict | None = None,
 ) -> Array:
-    from fsspec.core import get_fs_token_paths
-
     fs, token, paths = get_fs_token_paths(source, storage_options=storage_options or {})
 
     token = tokenize(source, token, blocksize, delimiter, sample_size)
 
+    if compression == "infer":
+        compression = infer_compression(paths[0])
+
     bytes_ingredients, sample_bytes = bytes_reading_ingredients(
         fs,
         paths,
-        None,
+        compression,
         delimiter,
         False,
         blocksize,
