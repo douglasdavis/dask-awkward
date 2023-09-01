@@ -677,12 +677,14 @@ def bytes_reading_ingredients(
     return out, sample_bytes
 
 
-def _string_array_from_bytestring(bytestring):
+def _string_array_from_bytestring(bytestring, delimiter):
     buffer = np.frombuffer(bytestring, dtype=np.uint8)
     array = ak.from_numpy(buffer)
     array = ak.unflatten(array, len(array))
     array = ak.enforce_type(array, "string")
-    array_split = ak.str.split_pattern(array, "\n")
+    if isinstance(delimiter, bytes):
+        delimiter = delimiter.decode()
+    array_split = ak.str.split_pattern(array, delimiter)
     lines = array_split[0]
     return lines
 
@@ -700,7 +702,7 @@ class FromTextFn:
             else:
                 bytestring = read_block(f, offsets, length, delimiter)
 
-        return _string_array_from_bytestring(bytestring)
+        return _string_array_from_bytestring(bytestring, delimiter)
 
 
 def from_text(
@@ -729,7 +731,7 @@ def from_text(
     rfind = sample_bytes.rfind(delimiter)
     if rfind > 0:
         sample_bytes = sample_bytes[:rfind]
-    meta = typetracer_array(_string_array_from_bytestring(sample_bytes))
+    meta = typetracer_array(_string_array_from_bytestring(sample_bytes, delimiter))
 
     return from_map(
         FromTextFn(),
