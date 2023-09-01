@@ -677,6 +677,16 @@ def bytes_reading_ingredients(
     return out, sample_bytes
 
 
+def _string_array_from_bytestring(bytestring):
+    buffer = np.frombuffer(bytestring, dtype=np.uint8)
+    array = ak.from_numpy(buffer)
+    array = ak.unflatten(array, len(array))
+    array = ak.enforce_type(array, "string")
+    array_split = ak.str.split_pattern(array, "\n")
+    lines = array_split[0]
+    return lines
+
+
 class FromTextFn:
     def __init__(self):
         pass
@@ -690,19 +700,21 @@ class FromTextFn:
             else:
                 bytestring = read_block(f, offsets, length, delimiter)
 
-            buffer = np.frombuffer(bytestring, dtype=np.uint8)
-            array = ak.from_numpy(buffer)
-            array = ak.unflatten(array, len(array))
-            array = ak.enforce_type(array, "string")
-            array_split = ak.str.split_pattern(array, "\n")
-            lines = array_split[0]
-            return lines
+        return _string_array_from_bytestring(bytestring)
 
 
-def from_text(source, blocksize, delimiter, storage_options: dict | None = None):
+def from_text(
+    source: str | list[str],
+    blocksize: str | int = "128 MiB",
+    delimiter: bytes = b"\n",
+    sample_size: str | int = "128 KiB",
+    storage_options: dict | None = None,
+) -> Array:
     from fsspec.core import get_fs_token_paths
 
     fs, token, paths = get_fs_token_paths(source, storage_options=storage_options or {})
+
+    token = tokenize(source, token, blocksize, delimiter, sample_size)
 
     bytes_ingredients, sample_bytes = bytes_reading_ingredients(
         fs,
@@ -711,13 +723,18 @@ def from_text(source, blocksize, delimiter, storage_options: dict | None = None)
         delimiter,
         False,
         blocksize,
-        "128 KiB",
+        sample_size,
     )
+
+    rfind = sample_bytes.rfind(delimiter)
+    if rfind > 0:
+        sample_bytes = sample_bytes[:rfind]
+    meta = typetracer_array(_string_array_from_bytestring(sample_bytes))
 
     return from_map(
         FromTextFn(),
         list(flatten(bytes_ingredients)),
         label="from-text",
         token=token,
-        meta=None,
+        meta=meta,
     )
